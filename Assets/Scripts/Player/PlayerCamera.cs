@@ -175,15 +175,28 @@ namespace MutantMinion.Player
             Vector3 direction = rotation * -Vector3.forward;
 
             // Determine final distance (with collision)
-            float finalDistance = currentDistance;
+            float desiredDistance = distance; // Always use the Inspector distance as target
 
             if (checkCollision)
             {
-                finalDistance = GetCollisionSafeDistance(targetPosition, direction, currentDistance);
+                desiredDistance = GetCollisionSafeDistance(targetPosition, direction, currentDistance);
+            }
+
+            // Adaptive smoothing: zoom in fast when hitting obstacle, zoom out slower when clear
+            float smoothSpeed;
+            if (desiredDistance < currentDistance)
+            {
+                // Zooming in (collision) - fast
+                smoothSpeed = collisionSmoothTime * 0.5f; // Faster zoom in
+            }
+            else
+            {
+                // Zooming out (returning to normal) - slower for smoothness
+                smoothSpeed = collisionSmoothTime * 2f; // Slower zoom out
             }
 
             // Smoothly adjust distance
-            currentDistance = Mathf.SmoothDamp(currentDistance, finalDistance, ref collisionDistanceVelocity, collisionSmoothTime);
+            currentDistance = Mathf.SmoothDamp(currentDistance, desiredDistance, ref collisionDistanceVelocity, smoothSpeed);
 
             // Calculate final camera position
             Vector3 finalPosition = targetPosition + direction * currentDistance;
@@ -200,14 +213,15 @@ namespace MutantMinion.Player
         /// </summary>
         private float GetCollisionSafeDistance(Vector3 targetPosition, Vector3 direction, float desiredDistance)
         {
-            float safeDistance = desiredDistance;
+            // Default to the desired distance (the one set in Inspector)
+            float safeDistance = distance;
 
             // Use SphereCast for better collision detection (prevents clipping)
             RaycastHit hit;
-            if (Physics.SphereCast(targetPosition, cameraRadius, direction, out hit, desiredDistance, collisionMask))
+            if (Physics.SphereCast(targetPosition, cameraRadius, direction, out hit, distance, collisionMask))
             {
                 // Calculate distance to collision point, accounting for camera radius
-                safeDistance = Mathf.Clamp(hit.distance - collisionOffset, minDistance, desiredDistance);
+                safeDistance = Mathf.Clamp(hit.distance - collisionOffset, minDistance, distance);
             }
 
             // Additional ground check when looking down
@@ -229,10 +243,8 @@ namespace MutantMinion.Player
                 }
             }
 
-            // Smoothly return to target distance when clear
-            targetDistance = Mathf.Lerp(targetDistance, distance, Time.deltaTime * 2f);
-
-            return Mathf.Min(safeDistance, targetDistance);
+            // Return the safe distance (will automatically return to original when clear)
+            return safeDistance;
         }
         
         private void OnDrawGizmosSelected()

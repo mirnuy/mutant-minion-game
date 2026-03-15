@@ -12,14 +12,19 @@ namespace MutantMinion.Examples
         [Header("Enemy Stats")]
         [SerializeField] private float maxHealth = 50f;
         [SerializeField] private float currentHealth = 50f;
-        
+
+        [Header("AI Settings")]
+        [SerializeField] private float followRange = 10f;
+        [SerializeField] private float stopDistance = 2f;
+        [SerializeField] private float moveSpeed = 2f;
+
         [Header("Visual Feedback")]
         [SerializeField] private Color normalColor = Color.red;
         [SerializeField] private Color damageColor = Color.white;
-        
+
         private Renderer enemyRenderer;
         private bool isDead;
-        
+
         private void Awake()
         {
             enemyRenderer = GetComponent<Renderer>();
@@ -75,27 +80,45 @@ namespace MutantMinion.Examples
         }
         
         /// <summary>
-        /// Example: Basic AI that follows player
+        /// Example: Basic AI that follows player on ground plane only
         /// </summary>
         private void Update()
         {
             if (isDead)
                 return;
-            
-            // Simple follow behavior
+
+            // Find player
             GameObject player = GameObject.FindGameObjectWithTag("Player");
-            if (player != null)
+            if (player == null)
+                return;
+
+            // Calculate distance to player (XZ plane only for proper ground-based following)
+            Vector3 playerPos = player.transform.position;
+            Vector3 enemyPos = transform.position;
+
+            // Calculate distance on XZ plane (ignore Y to prevent flying/digging)
+            Vector3 playerPosFlat = new Vector3(playerPos.x, enemyPos.y, playerPos.z);
+            float distance = Vector3.Distance(new Vector3(enemyPos.x, 0, enemyPos.z), 
+                                             new Vector3(playerPos.x, 0, playerPos.z));
+
+            // Only follow if player is within follow range AND farther than stop distance
+            if (distance <= followRange && distance > stopDistance)
             {
-                float distance = Vector3.Distance(transform.position, player.transform.position);
-                
-                // Follow if within range
-                if (distance > 2f && distance < 10f)
+                // Calculate direction on XZ plane only (keeps enemy on ground)
+                Vector3 direction = (playerPosFlat - enemyPos).normalized;
+
+                // Move enemy (only affects X and Z, Y stays unchanged)
+                transform.position += direction * moveSpeed * Time.deltaTime;
+
+                // Rotate to face player (but only on Y axis)
+                Vector3 lookDirection = playerPosFlat - enemyPos;
+                if (lookDirection.magnitude > 0.1f)
                 {
-                    Vector3 direction = (player.transform.position - transform.position).normalized;
-                    transform.position += direction * 2f * Time.deltaTime;
-                    transform.LookAt(player.transform);
+                    Quaternion targetRotation = Quaternion.LookRotation(lookDirection);
+                    transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, 5f * Time.deltaTime);
                 }
             }
+            // If distance > followRange, enemy stops moving (doesn't follow anymore)
         }
     }
 }
